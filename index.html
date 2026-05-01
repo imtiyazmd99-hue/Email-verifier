@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EmailCheck Pro — Verify Email Addresses</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<!-- SheetJS for Excel parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- EmailJS for owner notifications -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<style>
+/* ============================================================
+   CONFIGURATION — Replace these before deploying
+   ============================================================
+   GOOGLE_CLIENT_ID  → Google Cloud Console → OAuth 2.0 Client ID
+   EMAILJS_PUBLIC_KEY → emailjs.com → Account → Public Key
+   EMAILJS_SERVICE_ID → emailjs.com → Email Services → Service ID
+   EMAILJS_TEMPLATE_ID→ emailjs.com → Email Templates → Template ID
+   OWNER_EMAIL        → imtiyazmd99@gmail.com (already set below)
+   ============================================================ */
+
+:root {
+  --bg: #0a0c10;
+  --surface: #111318;
+  --surface2: #181c23;
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --accent: #3b82f6;
+  --accent-dim: rgba(59,130,246,0.15);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.12);
+  --text: #f1f5f9;
+  --muted: #64748b;
+  --muted2: #94a3b8;
+  --radius: 10px;
+  --radius-lg: 16px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ─── LOGIN SCREEN ─── */
+#loginScreen {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 100vh; padding: 2rem;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(59,130,246,0.08), transparent);
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-lg);
+  padding: 3rem 2.5rem;
+  max-width: 420px; width: 100%;
+  text-align: center;
+}
+.login-logo {
+  width: 52px; height: 52px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1.5rem;
+  font-size: 22px;
+}
+.login-card h1 { font-size: 22px; font-weight: 600; margin-bottom: 0.5rem; }
+.login-card p { color: var(--muted2); font-size: 14px; margin-bottom: 2rem; line-height: 1.5; }
+.google-btn {
+  width: 100%; padding: 0.75rem 1.25rem;
+  background: #fff; color: #1f2937;
+  border: none; border-radius: var(--radius);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px; font-weight: 500;
+  cursor: pointer; display: flex; align-items: center;
+  justify-content: center; gap: 10px;
+  transition: background 0.15s, transform 0.1s;
+}
+.google-btn:hover { background: #f3f4f6; }
+.google-btn:active { transform: scale(0.98); }
+.google-icon { width: 18px; height: 18px; flex-shrink: 0; }
+.login-footer { margin-top: 1.5rem; font-size: 12px; color: var(--muted); }
+
+/* ─── MAIN APP ─── */
+#appScreen { display: none; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.875rem 2rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; }
+.topbar-brand-icon {
+  width: 32px; height: 32px; background: var(--accent-dim);
+  border: 1px solid var(--accent); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.user-pill {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 14px 5px 8px;
+  font-size: 13px; color: var(--muted2);
+}
+.user-avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent-dim); object-fit: cover;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; color: var(--accent);
+}
+.signout-btn {
+  margin-left: 8px; background: none; border: none;
+  color: var(--muted); font-size: 12px; cursor: pointer;
+  padding: 2px 6px; border-radius: 4px;
+}
+.signout-btn:hover { color: var(--red); }
+
+.main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+/* ─── TABS ─── */
+.tabs { display: flex; gap: 4px; margin-bottom: 2rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 4px; width: fit-content;
+}
+.tab {
+  padding: 0.5rem 1.25rem; border-radius: 7px;
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  border: none; background: none; color: var(--muted2);
+  transition: all 0.15s;
+}
+.tab.active { background: var(--accent); color: #fff; }
+.tab:not(.active):hover { background: var(--surface2); color: var(--text); }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ─── SINGLE VERIFY ─── */
+.input-row { display: flex; gap: 10px; margin-bottom: 1rem; }
+.input-row input {
+  flex: 1; padding: 0.75rem 1rem;
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--radius); color: var(--text);
+  font-family: 'DM Sans', sans-serif; font-size: 15px;
+  outline: none; transition: border 0.15s;
+}
+.input-row input:focus { border-color: var(--accent); }
+.btn {
+  padding: 0.75rem 1.5rem; border: none; border-radius: var(--radius);
+  font-family: 'DM Sans', sans-serif; font-size: 14px;
+  font-weight: 600; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { opacity: 0.88; }
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-outline {
+  background: var(--surface); border: 1px solid var(--border2);
+  color: var(--muted2);
+}
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ─── RESULT CARD ─── */
+.result-card {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--radius-lg); padding: 1.5rem;
+  margin-top: 1.25rem; animation: fadeUp 0.25s ease;
+}
+.result-card.valid { border-color: rgba(34,197,94,0.4); }
+.result-card.invalid { border-color: rgba(239,68,68,0.35); }
+.result-card.warn { border-color: rgba(245,158,11,0.35); }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 1.25rem; }
+.status-badge {
+  font-size: 12px; font-weight: 600; padding: 4px 12px;
+  border-radius: 999px; letter-spacing: 0.03em;
+}
+.badge-valid { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+.badge-invalid { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.badge-warn { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+.result-email { font-family: 'DM Mono', monospace; font-size: 15px; color: var(--text); }
+
+.checks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1.25rem; }
+.check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted2); }
+.check-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-ok { background: var(--green); }
+.dot-fail { background: var(--red); }
+.dot-warn { background: var(--amber); }
+
+.divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+.detail-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+.detail-label { color: var(--muted); }
+.detail-val { font-family: 'DM Mono', monospace; color: var(--muted2); }
+
+.score-bar { margin-top: 1rem; }
+.score-bar-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.score-track { height: 6px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+.score-fill { height: 100%; border-radius: 999px; transition: width 0.5s ease; }
+.score-high { background: var(--green); }
+.score-mid { background: var(--amber); }
+.score-low { background: var(--red); }
+
+/* ─── BULK UPLOAD ─── */
+.upload-zone {
+  border: 2px dashed var(--border2); border-radius: var(--radius-lg);
+  padding: 3rem 2rem; text-align: center; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 1.5rem;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent); background: var(--accent-dim);
+}
+.upload-icon { font-size: 36px; margin-bottom: 1rem; }
+.upload-zone h3 { font-size: 16px; font-weight: 500; margin-bottom: 0.5rem; }
+.upload-zone p { color: var(--muted2); font-size: 14px; }
+.upload-zone em { color: var(--accent); font-style: normal; }
+#fileInput { display: none; }
+
+.bulk-controls { display: flex; gap: 10px; margin-bottom: 1.5rem; align-items: center; }
+.bulk-info { font-size: 13px; color: var(--muted2); flex: 1; }
+
+/* ─── RESULTS TABLE ─── */
+.table-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { background: var(--surface); }
+th { padding: 0.75rem 1rem; text-align: left; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 0.65rem 1rem; color: var(--muted2); border-bottom: 1px solid var(--border); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--surface2); }
+.td-email { font-family: 'DM Mono', monospace; color: var(--text); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-score { font-family: 'DM Mono', monospace; font-weight: 600; }
+.score-high-txt { color: var(--green); }
+.score-mid-txt { color: var(--amber); }
+.score-low-txt { color: var(--red); }
+
+/* ─── PROGRESS ─── */
+.progress-wrap { margin-bottom: 1.5rem; }
+.progress-label { font-size: 13px; color: var(--muted2); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.progress-track { height: 6px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.2s; }
+
+/* ─── STATS ─── */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+.stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.stat-val { font-size: 24px; font-weight: 600; }
+.stat-green { color: var(--green); }
+.stat-red { color: var(--red); }
+.stat-amber { color: var(--amber); }
+.stat-blue { color: var(--accent); }
+
+/* ─── SPINNER ─── */
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.5s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── TOAST ─── */
+.toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 0.875rem 1.25rem;
+  font-size: 14px; color: var(--text); z-index: 999;
+  animation: slideIn 0.25s ease;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
+@keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 600px) {
+  .topbar { padding: 0.75rem 1rem; }
+  .main { padding: 1.25rem 1rem 3rem; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .checks-grid { grid-template-columns: 1fr; }
+  .input-row { flex-direction: column; }
+  .bulk-controls { flex-direction: column; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════ LOGIN SCREEN ══════════════════════ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">✉</div>
+    <h1>EmailCheck Pro</h1>
+    <p>Verify single or bulk email addresses instantly.<br/>Sign in with your Google account to get started.</p>
+    <button class="google-btn" onclick="signInWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Continue with Google
+    </button>
+    <p class="login-footer">By signing in, you agree to let us log verification activity for tool improvement.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════ MAIN APP ══════════════════════ -->
+<div id="appScreen">
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="topbar-brand-icon">✉</div>
+      EmailCheck Pro
+    </div>
+    <div class="user-pill">
+      <div class="user-avatar" id="userAvatar"></div>
+      <span id="userName"></span>
+      <button class="signout-btn" onclick="signOut()" title="Sign out">✕</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('single', this)">Single Verify</button>
+      <button class="tab" onclick="switchTab('bulk', this)">Bulk Upload</button>
+    </div>
+
+    <!-- ── SINGLE VERIFY PANEL ── -->
+    <div class="panel active" id="panel-single">
+      <div class="input-row">
+        <input type="email" id="singleEmail" placeholder="Enter email address to verify..."
+          onkeydown="if(event.key==='Enter') verifySingle()" />
+        <button class="btn btn-primary" id="singleBtn" onclick="verifySingle()">Verify Email</button>
+      </div>
+      <div id="singleResult"></div>
+    </div>
+
+    <!-- ── BULK UPLOAD PANEL ── -->
+    <div class="panel" id="panel-bulk">
+      <div class="upload-zone" id="uploadZone"
+        onclick="document.getElementById('fileInput').click()"
+        ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+        ondrop="handleDrop(event)">
+        <div class="upload-icon">📊</div>
+        <h3>Upload Excel / CSV File</h3>
+        <p>Drag & drop your file here, or <em>click to browse</em><br/>
+          <small style="color:var(--muted);font-size:12px">Supported: .xlsx · .xls · .csv · Max 5,000 rows</small>
+        </p>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event)" />
+
+      <div id="bulkControls" style="display:none;">
+        <div id="statsRow" class="stats-row" style="display:none;"></div>
+        <div id="progressWrap" class="progress-wrap" style="display:none;">
+          <div class="progress-label">
+            <span id="progressText">Verifying...</span>
+            <span id="progressPct">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        </div>
+        <div class="bulk-controls">
+          <span class="bulk-info" id="bulkInfo"></span>
+          <button class="btn btn-primary" id="bulkRunBtn" onclick="runBulkVerify()">Run Verification</button>
+          <button class="btn btn-outline" id="exportBtn" onclick="exportResults()" style="display:none;">Export Results</button>
+        </div>
+        <div id="bulkTableWrap" class="table-wrap" style="display:none;">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Email Address</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Domain</th>
+                <th>Type</th>
+                <th>Issues</th>
+              </tr>
+            </thead>
+            <tbody id="bulkTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   ▸ CONFIGURATION — update these values before deploying
+   ══════════════════════════════════════════════════════════════ */
+const CONFIG = {
+  GOOGLE_CLIENT_ID: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+  EMAILJS_PUBLIC_KEY: 'YOUR_EMAILJS_PUBLIC_KEY',
+  EMAILJS_SERVICE_ID: 'YOUR_EMAILJS_SERVICE_ID',
+  EMAILJS_TEMPLATE_ID: 'YOUR_EMAILJS_TEMPLATE_ID',
+  OWNER_EMAIL: 'imtiyazmd99@gmail.com'
+};
+
+/* ══════════════════════════════════════════════════════════════
+   ▸ DISPOSABLE & FREE PROVIDER LISTS
+   ══════════════════════════════════════════════════════════════ */
+const DISPOSABLE = ['mailinator','guerrillamail','10minutemail','throwam','yopmail',
+  'trashmail','fakeinbox','sharklasers','guerrillamailblock','grr.la','spam4.me',
+  'maildrop','dispostable','tempmail','tmpmail','spamgourmet','mytemp','mohmal',
+  'jetable','filzmail','discard.email','spamherr','getairmail','tempr.email',
+  'mailnull','0-mail','mailtothis','mailnull','trashmail','throwaway'];
+
+const FREE_PROVIDERS = ['gmail','yahoo','hotmail','outlook','aol','icloud',
+  'protonmail','zoho','yandex','mail','gmx','live','msn','me','rediffmail',
+  'tutanota','fastmail','hushmail'];
+
+const CORP_DOMAINS = ['google','microsoft','apple','amazon','meta','netflix',
+  'twitter','linkedin','salesforce','adobe','oracle','ibm','intel','nvidia',
+  'qualcomm','paypal','stripe','shopify','uber','airbnb','infosys','tcs',
+  'wipro','hcl','cognizant','accenture'];
+
+const VALID_TLDS = ['com','net','org','edu','gov','io','co','uk','in','de',
+  'fr','au','ca','jp','cn','br','mx','ru','nl','se','no','fi','dk','es',
+  'it','pl','us','nz','za','sg','hk','ae','tr','my','ph','id','vn','th',
+  'ua','ar','cl','pe','ng','ke','ai','app','dev','tech','email'];
+
+/* ══════════════════════════════════════════════════════════════
+   ▸ AUTH
+   ══════════════════════════════════════════════════════════════ */
+let currentUser = null;
+
+function signInWithGoogle() {
+  // Initialize Google Identity Services
+  if (typeof google === 'undefined') {
+    showToast('Google Sign-In not loaded. Check your Client ID.');
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: CONFIG.GOOGLE_CLIENT_ID,
+    callback: handleGoogleResponse,
+    auto_select: false
+  });
+  google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      google.accounts.id.renderButton(
+        document.getElementById('loginScreen'),
+        { theme: 'outline', size: 'large' }
+      );
+    }
+  });
+}
+
+function handleGoogleResponse(response) {
+  const payload = parseJwt(response.credential);
+  currentUser = {
+    name: payload.name,
+    email: payload.email,
+    picture: payload.picture,
+    initials: payload.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)
+  };
+
+  // Show app
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+
+  // Populate user info
+  const avatar = document.getElementById('userAvatar');
+  if (currentUser.picture) {
+    avatar.innerHTML = `<img src="${currentUser.picture}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;" />`;
+  } else {
+    avatar.textContent = currentUser.initials;
+  }
+  document.getElementById('userName').textContent = currentUser.name;
+
+  // Notify owner of new login
+  emailjs.init(CONFIG.EMAILJS_PUBLIC_KEY);
+  notifyOwner('login', { user_name: currentUser.name, user_email: currentUser.email });
+}
+
+function parseJwt(token) {
+  const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(decodeURIComponent(atob(base64).split('').map(c =>
+    '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+}
+
+function signOut() {
+  currentUser = null;
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+function notifyOwner(type, data) {
+  if (!CONFIG.EMAILJS_PUBLIC_KEY || CONFIG.EMAILJS_PUBLIC_KEY.startsWith('YOUR')) return;
+  const now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+  emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID, {
+    to_email: CONFIG.OWNER_EMAIL,
+    subject: type === 'login'
+      ? `[EmailCheck Pro] New Login: ${data.user_name}`
+      : `[EmailCheck Pro] Verification Activity: ${data.user_name}`,
+    message: type === 'login'
+      ? `User logged in:\nName: ${data.user_name}\nEmail: ${data.user_email}\nTime: ${now}`
+      : `Verification report:\nUser: ${data.user_name} (${data.user_email})\nTime: ${now}\n\n` +
+        `Total: ${data.total} | Valid: ${data.valid} | Invalid: ${data.invalid} | Warn: ${data.warn}\n\n` +
+        `Emails verified:\n${data.emails}`,
+    reply_to: CONFIG.OWNER_EMAIL
+  }).catch(() => {});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ▸ EMAIL ANALYSIS ENGINE
+   ══════════════════════════════════════════════════════════════ */
+function analyzeEmail(email) {
+  const e = email.trim().toLowerCase();
+  const atIdx = e.lastIndexOf('@');
+  if (atIdx < 1) return emptyResult(e);
+
+  const local = e.slice(0, atIdx);
+  const domain = e.slice(atIdx + 1);
+  const parts = domain.split('.');
+  const tld = parts[parts.length - 1] || '';
+  const domainBase = parts.length >= 2 ? parts[parts.length - 2] : '';
+
+  const emailReg = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+  const formatValid = emailReg.test(e) && local.length >= 1 && domain.length >= 4;
+  const hasTLD = tld.length >= 2;
+  const knownTLD = VALID_TLDS.includes(tld);
+  const disposable = DISPOSABLE.some(d => domain.includes(d));
+  const free = FREE_PROVIDERS.some(f => domainBase === f);
+  const corporate = CORP_DOMAINS.some(c => domainBase.includes(c));
+  const domainOk = formatValid && domain.includes('.') && tld.length >= 2;
+  const mxLikely = formatValid && domainOk && !disposable && knownTLD;
+  const roleNames = ['admin','info','support','sales','contact','help',
+    'noreply','no-reply','webmaster','postmaster','abuse','hostmaster','hello','team','office'];
+  const roleBased = roleNames.some(r => local === r || local.startsWith(r+'.') || local.startsWith(r+'+'));
+  const hasConsecutiveDots = /\.{2,}/.test(e);
+  const localValid = !hasConsecutiveDots && !local.startsWith('.') && !local.endsWith('.');
+
+  let score = 0;
+  if (formatValid) score += 25;
+  if (hasTLD) score += 10;
+  if (knownTLD) score += 10;
+  if (domainOk) score += 15;
+  if (mxLikely) score += 20;
+  if (!disposable) score += 10;
+  if (!roleBased) score += 5;
+  if (localValid) score += 5;
+
+  const issues = [];
+  if (!formatValid) issues.push('Invalid format');
+  if (disposable) issues.push('Disposable address');
+  if (roleBased) issues.push('Role-based address');
+  if (!knownTLD) issues.push('Unknown TLD');
+  if (!localValid) issues.push('Malformed local part');
+
+  const type = disposable ? 'Disposable' : corporate ? 'Corporate' : free ? 'Free provider' : 'Custom domain';
+  return { email: e, formatValid, hasTLD, knownTLD, domainOk, disposable, mxLikely, roleBased, free, corporate, domain, tld, domainBase, score, type, issues, localValid };
+}
+
+function emptyResult(e) {
+  return { email: e, formatValid: false, hasTLD: false, knownTLD: false, domainOk: false, disposable: false, mxLikely: false, roleBased: false, free: false, corporate: false, domain: '', tld: '', score: 0, type: '—', issues: ['Invalid format'] };
+}
+
+function scoreInfo(score) {
+  if (score >= 80) return { label: 'Valid', cardCls: 'valid', badgeCls: 'badge-valid', scoreCls: 'score-high', txtCls: 'score-high-txt' };
+  if (score >= 50) return { label: 'Likely Valid', cardCls: 'warn', badgeCls: 'badge-warn', scoreCls: 'score-mid', txtCls: 'score-mid-txt' };
+  return { label: 'Invalid / Risky', cardCls: 'invalid', badgeCls: 'badge-invalid', scoreCls: 'score-low', txtCls: 'score-low-txt' };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ▸ SINGLE VERIFY
+   ══════════════════════════════════════════════════════════════ */
+function verifySingle() {
+  const input = document.getElementById('singleEmail');
+  const btn = document.getElementById('singleBtn');
+  const val = input.value.trim();
+  if (!val) { showToast('Please enter an email address.'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Verifying...';
+
+  setTimeout(() => {
+    const r = analyzeEmail(val);
+    const si = scoreInfo(r.score);
+    const checks = [
+      { label: 'Valid format', ok: r.formatValid },
+      { label: 'Has valid TLD', ok: r.hasTLD && r.knownTLD },
+      { label: 'Domain plausible', ok: r.domainOk },
+      { label: 'Not disposable', ok: !r.disposable },
+      { label: 'MX likely exists', ok: r.mxLikely },
+      { label: 'Not role-based', ok: !r.roleBased },
+    ];
+    const checksHtml = checks.map(c => `
+      <div class="check-item">
+        <span class="check-dot ${c.ok ? 'dot-ok' : 'dot-fail'}"></span>
+        <span>${c.label}</span>
+      </div>`).join('');
+
+    document.getElementById('singleResult').innerHTML = `
+      <div class="result-card ${si.cardCls}">
+        <div class="result-header">
+          <span class="status-badge ${si.badgeCls}">${si.label}</span>
+          <span class="result-email">${r.email}</span>
+        </div>
+        <div class="checks-grid">${checksHtml}</div>
+        <hr class="divider"/>
+        <div class="detail-row"><span class="detail-label">Domain</span><span class="detail-val">${r.domain || '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">TLD</span><span class="detail-val">${r.tld ? '.'+r.tld : '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Type</span><span class="detail-val">${r.type}</span></div>
+        <div class="detail-row"><span class="detail-label">Issues</span><span class="detail-val">${r.issues.length ? r.issues.join(', ') : 'None'}</span></div>
+        <div class="score-bar">
+          <div class="score-bar-label"><span>Confidence Score</span><span>${r.score}/100</span></div>
+          <div class="score-track"><div class="score-fill ${si.scoreCls}" style="width:${r.score}%"></div></div>
+        </div>
+      </div>`;
+
+    // Notify owner
+    if (currentUser) {
+      notifyOwner('verify', {
+        user_name: currentUser.name,
+        user_email: currentUser.email,
+        total: 1, valid: r.score >= 80 ? 1 : 0,
+        invalid: r.score < 50 ? 1 : 0, warn: (r.score >= 50 && r.score < 80) ? 1 : 0,
+        emails: `${r.email} → ${si.label} (${r.score}/100)`
+      });
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Verify Email';
+  }, 600);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ▸ BULK VERIFY
+   ══════════════════════════════════════════════════════════════ */
+let bulkEmails = [];
+let bulkResults = [];
+
+function handleDragOver(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('uploadZone').classList.remove('drag-over'); }
+function handleDrop(e) { e.preventDefault(); document.getElementById('uploadZone').classList.remove('drag-over'); processFile(e.dataTransfer.files[0]); }
+function handleFileSelect(e) { processFile(e.target.files[0]); }
+
+function processFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let emails = [];
+    if (ext === 'csv') {
+      const text = e.target.result;
+      emails = text.split(/\r?\n/).map(l => l.split(',')[0].replace(/"/g, '').trim()).filter(Boolean);
+    } else {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      // Find column with email addresses
+      data.forEach((row, ri) => {
+        if (ri === 0) return; // skip header
+        row.forEach(cell => {
+          if (cell && typeof cell === 'string' && cell.includes('@')) emails.push(cell.trim());
+        });
+      });
+    }
+    // Deduplicate & limit
+    bulkEmails = [...new Set(emails.filter(e => e.length > 2))].slice(0, 5000);
+    bulkResults = [];
+    showBulkControls();
+  };
+  if (ext === 'csv') reader.readAsText(file);
+  else reader.readAsBinaryString(file);
+}
+
+function showBulkControls() {
+  document.getElementById('bulkControls').style.display = 'block';
+  document.getElementById('bulkInfo').textContent = `${bulkEmails.length} unique email address${bulkEmails.length !== 1 ? 'es' : ''} found`;
+  document.getElementById('bulkRunBtn').style.display = 'inline-block';
+  document.getElementById('exportBtn').style.display = 'none';
+  document.getElementById('bulkTableWrap').style.display = 'none';
+  document.getElementById('statsRow').style.display = 'none';
+  document.getElementById('progressWrap').style.display = 'none';
+}
+
+async function runBulkVerify() {
+  if (bulkEmails.length === 0) { showToast('No emails loaded.'); return; }
+  bulkResults = [];
+  const btn = document.getElementById('bulkRunBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Running...';
+
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('bulkTableWrap').style.display = 'block';
+  document.getElementById('statsRow').style.display = 'none';
+  document.getElementById('bulkTableBody').innerHTML = '';
+
+  const total = bulkEmails.length;
+  for (let i = 0; i < total; i++) {
+    await new Promise(r => setTimeout(r, 5)); // tiny delay to keep UI responsive
+    const r = analyzeEmail(bulkEmails[i]);
+    bulkResults.push(r);
+    updateProgress(i + 1, total);
+    appendTableRow(r, i + 1);
+  }
+
+  updateStats();
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('exportBtn').style.display = 'inline-block';
+  btn.disabled = false; btn.textContent = 'Run Again';
+
+  // Notify owner
+  if (currentUser) {
+    const valid = bulkResults.filter(r => r.score >= 80).length;
+    const invalid = bulkResults.filter(r => r.score < 50).length;
+    const warn = total - valid - invalid;
+    const emailsList = bulkResults.slice(0, 20).map(r => {
+      const si = scoreInfo(r.score);
+      return `${r.email} → ${si.label} (${r.score}/100)`;
+    }).join('\n') + (total > 20 ? `\n...and ${total - 20} more` : '');
+    notifyOwner('verify', {
+      user_name: currentUser.name, user_email: currentUser.email,
+      total, valid, invalid, warn, emails: emailsList
+    });
+  }
+}
+
+function updateProgress(done, total) {
+  const pct = Math.round((done / total) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `Verifying ${done} of ${total}...`;
+  document.getElementById('progressPct').textContent = pct + '%';
+}
+
+function appendTableRow(r, idx) {
+  const si = scoreInfo(r.score);
+  const tbody = document.getElementById('bulkTableBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="color:var(--muted)">${idx}</td>
+    <td class="td-email" title="${r.email}">${r.email}</td>
+    <td><span class="status-badge ${si.badgeCls}" style="font-size:11px">${si.label}</span></td>
+    <td class="td-score ${si.txtCls}">${r.score}</td>
+    <td style="font-size:12px;color:var(--muted2)">${r.domain || '—'}</td>
+    <td style="font-size:12px;color:var(--muted2)">${r.type}</td>
+    <td style="font-size:12px;color:var(--muted2)">${r.issues.join(', ') || '—'}</td>`;
+  tbody.appendChild(tr);
+}
+
+function updateStats() {
+  const total = bulkResults.length;
+  const valid = bulkResults.filter(r => r.score >= 80).length;
+  const invalid = bulkResults.filter(r => r.score < 50).length;
+  const warn = total - valid - invalid;
+  document.getElementById('statsRow').style.display = 'grid';
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total</div><div class="stat-val stat-blue">${total}</div></div>
+    <div class="stat-card"><div class="stat-label">Valid</div><div class="stat-val stat-green">${valid}</div></div>
+    <div class="stat-card"><div class="stat-label">Invalid</div><div class="stat-val stat-red">${invalid}</div></div>
+    <div class="stat-card"><div class="stat-label">Needs Review</div><div class="stat-val stat-amber">${warn}</div></div>`;
+}
+
+function exportResults() {
+  if (!bulkResults.length) return;
+  const rows = [['Email', 'Status', 'Score', 'Domain', 'TLD', 'Type', 'Disposable', 'Free Provider', 'Role-Based', 'Issues']];
+  bulkResults.forEach(r => {
+    const si = scoreInfo(r.score);
+    rows.push([r.email, si.label, r.score, r.domain, r.tld, r.type,
+      r.disposable ? 'Yes' : 'No', r.free ? 'Yes' : 'No',
+      r.roleBased ? 'Yes' : 'No', r.issues.join('; ')]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'EmailCheck Results');
+  XLSX.writeFile(wb, `EmailCheck_Results_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('Results exported to Excel!');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ▸ UI HELPERS
+   ══════════════════════════════════════════════════════════════ */
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+function showToast(msg, duration = 3000) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ▸ INIT
+   ══════════════════════════════════════════════════════════════ */
+window.onload = () => {
+  emailjs.init(CONFIG.EMAILJS_PUBLIC_KEY);
+  // Auto-initialize Google Sign-In if client ID is set
+  if (CONFIG.GOOGLE_CLIENT_ID && !CONFIG.GOOGLE_CLIENT_ID.startsWith('YOUR')) {
+    window.onGoogleLibraryLoad = () => {
+      google.accounts.id.initialize({
+        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        callback: handleGoogleResponse
+      });
+    };
+  }
+};
+</script>
+</body>
+</html>
